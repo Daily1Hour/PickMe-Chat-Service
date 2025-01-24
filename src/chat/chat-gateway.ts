@@ -132,7 +132,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   @SubscribeMessage('create_room')
   handleCreateRoom(socket: Socket, payload: CreateRoomPayload) {
-    const { hostId, participants } = payload;
+    const participants = [...payload.participants, payload.hostId];
 
     // 새 roomId 생성
     const roomId = this.generateRandomRoomId();
@@ -159,7 +159,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`방 생성: roomId=${roomId}, 참가자=${participants.join(', ')}`);
 
     // 생성된 roomId를 요청 보낸 클라이언트에게 알림
-    socket.emit('room_created', {
+    this.server.to(roomId).emit('room_created', {
       roomId,
       participants,
     });
