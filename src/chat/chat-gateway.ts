@@ -184,9 +184,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 해당 방에 user를 추가
     roomMembers.add(userId);
     // userRoomsMap에도 추가
-    const participants = this.userRoomsMap.get(userId) || new Set();
-    participants.add(roomId);
-    this.userRoomsMap.set(userId, participants);
+    const userSet = this.userRoomsMap.get(userId);
+    if (userSet) {
+      userSet.add(roomId);
+    } else {
+      this.userRoomsMap.set(userId, new Set([roomId]));
+    }
+
+    // 참가자
+    const participants = [...roomMembers];
 
     // 실제 소켓 join
     const socketId = this.userSocketMap.get(userId);
