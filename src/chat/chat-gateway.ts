@@ -201,9 +201,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
     console.log(`유저 ${userId}가 방 ${roomId}에 참여했습니다.`);
 
-    this.server.to(userId).emit('room_created', {
+    this.server.to(roomId).emit('room_created', {
       roomId,
-      participants,
+      participants: [...participants],
     });
   }
 
