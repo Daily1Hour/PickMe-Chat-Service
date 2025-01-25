@@ -207,6 +207,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  @SubscribeMessage('typing')
+  handleTyping(socket: Socket, payload: { userId: string; roomId: string }) {
+    const { userId, roomId } = payload;
+    console.log(`유저 ${userId}가 방 ${roomId}에서 타이핑 중`);
+    this.server.to(roomId).emit('typing', userId);
+  }
+
   /**
    * 메시지 전송 - 1:1도, 1:N도 모두 동일 로직
    *  - (예) socket.emit('send_message', {
