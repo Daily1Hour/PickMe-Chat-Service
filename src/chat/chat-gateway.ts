@@ -12,7 +12,7 @@ import { Server, Socket } from 'socket.io';
  * - 원하는 만큼 참여자를 넣어 1:1 또는 1:N 모두 처리 가능
  */
 interface CreateRoomPayload {
-  hostId: string;          // 방을 생성한 사람 (옵션)
+  hostId: string;         // 방을 생성한 사람 (옵션)
   participants: string[]; // 이 방에 들어갈 유저들의 userId 목록
 }
 
@@ -133,6 +133,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('create_room')
   handleCreateRoom(socket: Socket, payload: CreateRoomPayload) {
     const { hostId, participants } = payload;
+    const participantArray = [...participants, hostId];
 
     // 새 roomId 생성
     const roomId = this.generateRandomRoomId();
@@ -140,7 +141,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.roomMembersMap.set(roomId, new Set(participants));
 
     // 각 참여자별로 userRoomsMap에 roomId 추가 & 실제 소켓 join
-    participants.forEach((userId) => {
+    participantArray.forEach((userId) => {
       const userSet = this.userRoomsMap.get(userId);
       if (userSet) {
         userSet.add(roomId);
@@ -156,12 +157,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     });
 
-    console.log(`방 생성: roomId=${roomId}, 참가자=${participants.join(', ')}`);
+    console.log(`방 생성: roomId=${roomId}, 참가자=${participantArray.join(', ')}`);
 
-    // 생성된 roomId를 요청 보낸 클라이언트에게 알림
-    socket.emit('room_created', {
+    // 생성된 roomId를 모든 room 참가자에게 알림
+    this.server.to(roomId).emit('room_created', {
       roomId,
-      participants,
+      participants: participantArray,
     });
   }
 
@@ -173,20 +174,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('join_room')
   handleJoinRoom(socket: Socket, payload: { userId: string; roomId: string }) {
     const { userId, roomId } = payload;
-    const roomMembers = this.roomMembersMap.get(roomId);
+    const participants = this.roomMembersMap.get(roomId);
 
-    if (!roomMembers) {
+    if (!participants) {
       // 없는 방이면 에러
       socket.emit('system', { content: `존재하지 않는 방입니다: ${roomId}` });
       return;
     }
 
     // 해당 방에 user를 추가
-    roomMembers.add(userId);
+    participants.add(userId);
+    const participantArray = Array.from(participants);
     // userRoomsMap에도 추가
-    const participants = this.userRoomsMap.get(userId) || new Set();
-    participants.add(roomId);
-    this.userRoomsMap.set(userId, participants);
+    const rooms = this.userRoomsMap.get(userId) || new Set();
+    rooms.add(roomId);
+    this.userRoomsMap.set(userId, rooms);
 
     // 실제 소켓 join
     const socketId = this.userSocketMap.get(userId);
@@ -195,15 +197,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userSocket?.join(roomId);
     }
 
-    // 알림 (옵션)
+    // 새로운 참가자 알림
     this.server.to(roomId).emit('system', {
       content: `${userId} joined room: ${roomId}`,
     });
     console.log(`유저 ${userId}가 방 ${roomId}에 참여했습니다.`);
 
-    this.server.to(userId).emit('room_created', {
+    // 생성된 roomId를 모든 room 참가자에게 알림
+    this.server.to(roomId).emit('room_created', {
       roomId,
-      participants,
+      participants: participantArray,
     })
   }
 
@@ -271,5 +274,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       content: `${userId}님이 방을 떠났습니다.`,
     });
     console.log(`유저 ${userId}가 방 ${roomId}에서 나갔습니다.`);
+  }
+
+  @SubscribeMessage('typing')
+  handleSendingMessage(socket: Socket, payload: { userId: string; roomId: string; }) {
+    const { userId, roomId } = payload;
+
+    this.server.to(roomId).emit('typing', userId);
   }
 }
